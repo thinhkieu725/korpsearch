@@ -3,9 +3,42 @@ import argparse
 from pathlib import Path
 import logging
 import json
+import os
+import pickle
+
+from collections import defaultdict
 
 from util import setup_logger
 from search import main_search
+
+
+def append_sentences_to_csv(conllu_path, csv_path, sentence_indexes, overwrite=False):
+    sentence_counter = 0
+    current_block = []
+    output_blocks = []
+
+    with open(conllu_path, 'r', encoding='utf-8') as infile:
+        next(infile, None)  # Skip the first header line
+        for line in infile:
+            if line.strip() == "":
+                if current_block:
+                    sentence_counter += 1
+                    if sentence_counter in sentence_indexes:
+                        output_blocks.append(current_block.copy())
+                    current_block.clear()
+            else:
+                current_block.append(line.rstrip('\n'))
+        if current_block:
+            sentence_counter += 1
+            if sentence_counter in sentence_indexes:
+                output_blocks.append(current_block)
+
+    mode = 'w' if overwrite or not os.path.exists(csv_path) else 'a'
+    with open(csv_path, mode, encoding='utf-8', newline='') as outfile:
+        for block in output_blocks:
+            for line in block:
+                outfile.write(line + '\n')
+            outfile.write('\n')  # separate blocks
 
 
 def main(args: argparse.Namespace) -> None:
@@ -13,17 +46,47 @@ def main(args: argparse.Namespace) -> None:
     if args.print == 'json':
         print(json.dumps(out))
     elif args.print == 'kwic' and out['kwic']:
-        print(f"{out['hits']} search results. Showing n:o {out['start']}-{out['end']}:")
-        for n, result in enumerate(out['kwic'], out['start']):
-            match = result['match']
-            print(f"{n}. [{result['sentence']}:{match['position']}]", end="")
-            for i, token in enumerate(result['tokens']):
-                if i == match['start']:
-                    print(" {", end="")
-                print(" " + "/".join(token.values()), end="")
-                if i + 1 == match['end']:
-                    print(" }", end="")
-            print()
+        if args.output_conllu_file:
+            search_id_suffix = f"_{args.id}" if args.id is not None else ""
+
+            sentence_idx = defaultdict(set)
+            for match in out['kwic']:
+                sentence_idx[match['corpus']].add(match['sentence'])
+
+            for corpus in sentence_idx:
+                output_filepath = Path(args.base_dir) / Path(corpus + f'_output{search_id_suffix}')
+                output_indices_filepath = Path(args.base_dir) / Path(corpus + f'_output_indices{search_id_suffix}.pkl')
+                if os.path.exists(output_filepath):
+                    os.remove(output_filepath)
+                if os.path.exists(output_indices_filepath):
+                    os.remove(output_indices_filepath)
+
+            for corpus, sentence in sentence_idx.items():
+                append_sentences_to_csv(
+                    Path(args.base_dir) / Path(corpus).with_suffix(".csv"),
+                    Path(args.base_dir) / Path(corpus + f'_output{search_id_suffix}'),
+                    sentence,
+                    args.overwrite_file,
+                )
+
+            if args.output_indices:
+                for corpus, sentence in sentence_idx.items():
+                    output_indices_filepath = Path(args.base_dir) / Path(corpus + f'_output_indices{search_id_suffix}.pkl')
+                    with open(output_indices_filepath, 'wb') as f:
+                        # korpsearch sentence numbers are 1-based; deptreepy expects 0-based
+                        pickle.dump(sorted(s - 1 for s in sentence), f)
+        else:
+            print(f"{out['hits']} search results. Showing n:o {out['start']}-{out['end']}:")
+            for n, result in enumerate(out['kwic'], out['start']):
+                match = result['match']
+                print(f"{n}. [{result['sentence']}:{match['position']}]", end="")
+                for i, token in enumerate(result['tokens']):
+                    if i == match['start']:
+                        print(" {", end="")
+                    print(" " + "/".join(token.values()), end="")
+                    if i + 1 == match['end']:
+                        print(" }", end="")
+                print()
     else:
         print(f"{out['hits']} search results.")
 
@@ -64,6 +127,15 @@ parser.add_argument('--no-sentence-breaks', action='store_true',
     help="don't care about sentence breaks (default: do care)")
 parser.add_argument('--filter', action='store_true',
     help='filter the final results (should not be necessary, and can take time)')
+
+parser.add_argument('--output-conllu-file', action='store_true',
+    help='write matched sentences to a CoNLL-U file instead of printing KWIC results')
+parser.add_argument('--overwrite-file', action='store_true',
+    help='overwrite the output file instead of appending to it')
+parser.add_argument('--output-indices', action='store_true',
+    help='also write a pickle file of matched (0-based) sentence indices per corpus')
+parser.add_argument('--id', type=str, default=None,
+    help='optional search id, appended to output filenames to avoid clashes between concurrent searches')
 
 if __name__ == '__main__':
     args = parser.parse_args()

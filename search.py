@@ -275,7 +275,8 @@ def main_search(args: Namespace) -> dict[str, Any]:
             if start < len(results) and end >= 0:
                 query_offset = query.max_offset() + 1
                 try:
-                    for match_pos in results[max(0, start) : end+1]:
+                    for match_pos in results:
+                    #for match_pos in results[max(0, start) : end+1]:
                         sentence = corpus.get_sentence_from_position(match_pos)
                         match_start = match_pos - corpus.sentence_pointers.array[sentence]
                         tokens = [
