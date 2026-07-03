@@ -11,6 +11,8 @@ from collections import defaultdict
 from util import setup_logger
 from search import main_search
 
+TEMP_VOLUME_PATH = Path(__file__).resolve().parent.parent / Path("temp_volume")
+INTERMEDIATE_OUTPUT_PATH = TEMP_VOLUME_PATH / "intermediate_output"
 
 def append_sentences_to_csv(conllu_path, csv_path, sentence_indexes, overwrite=False):
     sentence_counter = 0
@@ -34,6 +36,8 @@ def append_sentences_to_csv(conllu_path, csv_path, sentence_indexes, overwrite=F
                 output_blocks.append(current_block)
 
     mode = 'w' if overwrite or not os.path.exists(csv_path) else 'a'
+    Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
+    
     with open(csv_path, mode, encoding='utf-8', newline='') as outfile:
         for block in output_blocks:
             for line in block:
@@ -49,13 +53,15 @@ def main(args: argparse.Namespace) -> None:
         if args.output_conllu_file:
             search_id_suffix = f"_{args.id}" if args.id is not None else ""
 
+            INTERMEDIATE_OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
+
             sentence_idx = defaultdict(set)
             for match in out['kwic']:
                 sentence_idx[match['corpus']].add(match['sentence'])
 
             for corpus in sentence_idx:
-                output_filepath = Path(args.base_dir) / Path(corpus + f'_output{search_id_suffix}')
-                output_indices_filepath = Path(args.base_dir) / Path(corpus + f'_output_indices{search_id_suffix}.pkl')
+                output_filepath = INTERMEDIATE_OUTPUT_PATH / (corpus + f'_output{search_id_suffix}')
+                output_indices_filepath = INTERMEDIATE_OUTPUT_PATH / (corpus + f'_output_indices{search_id_suffix}.pkl')
                 if os.path.exists(output_filepath):
                     os.remove(output_filepath)
                 if os.path.exists(output_indices_filepath):
@@ -64,14 +70,14 @@ def main(args: argparse.Namespace) -> None:
             for corpus, sentence in sentence_idx.items():
                 append_sentences_to_csv(
                     Path(args.base_dir) / Path(corpus).with_suffix(".csv"),
-                    Path(args.base_dir) / Path(corpus + f'_output{search_id_suffix}'),
+                    INTERMEDIATE_OUTPUT_PATH / Path(corpus + '_output' + search_id_suffix),
                     sentence,
-                    args.overwrite_file,
+                    args.overwrite_file
                 )
 
             if args.output_indices:
                 for corpus, sentence in sentence_idx.items():
-                    output_indices_filepath = Path(args.base_dir) / Path(corpus + f'_output_indices{search_id_suffix}.pkl')
+                    output_indices_filepath = INTERMEDIATE_OUTPUT_PATH / Path(corpus + '_output_indices' + search_id_suffix + '.pkl')
                     with open(output_indices_filepath, 'wb') as f:
                         # korpsearch sentence numbers are 1-based; deptreepy expects 0-based
                         pickle.dump(sorted(s - 1 for s in sentence), f)
