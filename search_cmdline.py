@@ -11,7 +11,7 @@ from collections import defaultdict
 from util import setup_logger
 from search import main_search
 
-TEMP_VOLUME_PATH = Path(__file__).resolve().parent.parent / Path("temp_volume")
+TEMP_VOLUME_PATH = Path(__file__).resolve().parent.parent / Path("depsearch_tools") / Path("temp_volume")
 INTERMEDIATE_OUTPUT_PATH = TEMP_VOLUME_PATH / "intermediate_output"
 
 def append_sentences_to_csv(conllu_path, csv_path, sentence_indexes, overwrite=False):
