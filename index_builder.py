@@ -33,7 +33,7 @@ def build_index(corpus: Corpus, template: Template, args: Namespace) -> None:
     logging.debug(f"Building index")
     keyspath, valspath = IntBytesMap.getpaths(index_path)
     def yield_bigset_values() -> Iterable[bytes]:
-        smallsets = IntArray.create(size, index_path, max_value=size)
+        smallsets = IntArray.create(size, index_path, max_value=len(corpus))
         bigset_keys = IntArray.create(size, keyspath, max_value=max_value)
         smallsets_ctr = bigsets_ctr = 0
         for value, bitmap in bitmaps:
